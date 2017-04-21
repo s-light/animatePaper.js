@@ -91,6 +91,10 @@ function _getColorComponentNames(color_obj) {
         }
     }
     // TODO alpha handling
+    // this does not work i did not found why. :-(
+    if (color_obj.alpha) {
+        color_component_names.push("alpha");
+    }
     return color_component_names;
 }
 
@@ -402,22 +406,31 @@ var _tweenPropHooks = {
     },
     Color: {
             get: function(tween) {
+                // 'should' work but does not:
+                // return tween.item[tween.prop];
+                // this creates a unlinked copy of only the color component values.
+                // this seems to be nessesecary to avoid a bug/problem in
+                // paper.js Color class in combinaiton with Groups
                 const current_color = tween.item[tween.prop];
+                console.log("get current_color", current_color);
                 const component_names = _getColorComponentNames(current_color);
                 const result = {};
                 for (const component_name of component_names) {
                     result[component_name] = current_color[component_name];
                 }
-                console.log("result", result);
+                console.log("get result", result);
                 return result;
             },
             set: function(tween) {
-                const component_names = _getColorComponentNames(tween.item[tween.prop]);
-
+                // this creates a unlinked copy of only the color component values.
+                // this seems to be nessesecary to avoid a bug in
+                // paper.js Color class in combinaiton with Groups
                 const current_color = tween.item[tween.prop];
-                const color_new = {};
+                console.log("current_color", current_color);
+                const component_names = _getColorComponentNames(current_color);
 
                 console.log("tween.now", tween.now);
+                const color_new = {};
                 for (const component_name of component_names) {
                     color_new[component_name] = (
                         current_color[component_name] +
@@ -426,7 +439,6 @@ var _tweenPropHooks = {
                 }
                 console.log("color_new", color_new);
                 tween.item[tween.prop] = color_new;
-                console.log("set done.");
             },
             ease: function(tween, eased) {
                 // const color_type = _getColorType(tween.End);
@@ -444,9 +456,18 @@ var _tweenPropHooks = {
                         tween._easeColorCache = {};
                     }
                     if (typeof tween._easeColorCache[curProp] === "undefined") {
-                        tween._easeColorCache[curProp] = 0;
+                        if (curProp === "alpha") {
+                            tween._easeColorCache[curProp] = 1;
+                        } else {
+                            tween._easeColorCache[curProp] = 0;
+                        }
                     }
                     var end = Number(tween.end[curProp] || 0);
+                    if (curProp === "alpha") {
+                        end = Number(tween.end[curProp] || 1);
+                    }
+
+                    // check for realtive animation
                     if (!!tween.end[curProp]) {
                         r = ("" + tween.end[curProp]).match(dirRegexp);
                     }
@@ -454,7 +475,9 @@ var _tweenPropHooks = {
                         dir = r[1];
                         end = Number(r[2]);
                     }
+
                     if (typeof tween.end[curProp] !== "undefined") {
+                        // handle relative or absolute animation
                         if (dir === "+") {
                             tween.now[curProp] = _ease(end) - tween._easeColorCache[curProp];
                             tween._easeColorCache[curProp] += tween.now[curProp];
@@ -463,11 +486,19 @@ var _tweenPropHooks = {
                             tween._easeColorCache[curProp] += tween.now[curProp];
                             tween.now[curProp] = -tween.now[curProp];
                         } else {
-                            tween.now[curProp] = (end - tween.start[curProp]) * eased - tween._easeColorCache[curProp];
+                            const start = tween.start[curProp];
+                            tween.now[curProp] = (
+                                ((end - start) * eased) -
+                                tween._easeColorCache[curProp]
+                            );
                             tween._easeColorCache[curProp] += tween.now[curProp];
                         }
                     } else {
-                        tween.now[curProp] = 0;
+                        if (curProp === "alpha") {
+                            tween.now[curProp] = 1;
+                        } else {
+                            tween.now[curProp] = 0;
+                        }
                     }
                 }
                 return tween.now;
